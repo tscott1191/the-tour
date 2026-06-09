@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>The Tour — Scorecard</title>
+<meta name="description" content="Scorecard tracker for The Tour: sports betting played as golf." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" />
+<style>
+:root{
+  --pine:#13332a; --pine2:#0d241d; --felt:#1d4d3c;
+  --card:#f3ead3; --card2:#ece0c2; --edge:#d8c79b;
+  --ink:#23211a; --ink2:#6b6451; --gold:#c69b3c;
+  --red:#b2371d; --navy:#284667; --line:#cbb88a;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+.sg-root{ min-height:100vh; color:var(--ink); font-family:"Inter",system-ui,sans-serif;
+  background:radial-gradient(120% 60% at 50% -10%, #1c4a3a 0%, var(--pine) 45%, var(--pine2) 100%); padding-bottom:48px; }
+input,select,button{font-family:inherit}
+.sg-header{ padding:22px 18px 8px; max-width:760px; margin:0 auto; }
+.sg-eyebrow{ font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--gold); opacity:.9; }
+.sg-title{ display:block; width:100%; border:none; background:transparent; color:var(--card);
+  font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:clamp(30px,8vw,46px); line-height:1; letter-spacing:-.02em; padding:2px 0 0; }
+.sg-title:focus{outline:none; box-shadow:0 2px 0 var(--gold)}
+.sg-roundbar{ display:flex; gap:7px; overflow-x:auto; padding:14px 0 4px; scrollbar-width:none; }
+.sg-roundbar::-webkit-scrollbar{display:none}
+.sg-chip{ flex:0 0 auto; border:1px solid rgba(243,234,211,.28); background:rgba(0,0,0,.12); color:var(--card);
+  padding:7px 13px; border-radius:999px; font-size:13px; cursor:pointer; white-space:nowrap; transition:.15s; }
+.sg-chip.on{ background:var(--card); color:var(--pine); border-color:var(--card); font-weight:600; }
+.sg-chip.add{ color:var(--gold); border-style:dashed; }
+
+.sg-main{ max-width:760px; margin:0 auto; padding:8px 14px; display:flex; flex-direction:column; gap:14px; }
+.sg-card{ background:var(--card); border:1px solid var(--edge); border-radius:14px; padding:16px; box-shadow:0 1px 0 #fff inset, 0 12px 30px -18px #000; }
+.sg-card.meta{padding:13px 16px}
+.card-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.card-head h2{ margin:0; font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:19px; letter-spacing:-.01em; color:var(--ink); }
+.hint{ color:var(--ink2); font-size:12.5px; } .hint.pad{padding:6px 2px}
+
+.meta-row{display:flex; align-items:center; gap:10px}
+.meta-row.sub{margin-top:6px}
+.round-name{ flex:1; border:none; background:transparent; font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:20px; color:var(--ink); padding:2px 0; }
+.round-name:focus{outline:none; box-shadow:0 2px 0 var(--gold)}
+.round-date{ border:1px solid var(--edge); border-radius:8px; padding:5px 9px; background:#fff8e9; font-size:12.5px; width:170px; }
+.meta-sub{ font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--ink2); margin-left:auto; }
+
+.solid{ background:var(--pine); color:var(--card); border:none; border-radius:9px; padding:9px 14px; font-weight:600; cursor:pointer; }
+.solid.sm{padding:7px 11px; font-size:13px}
+.ghost{ background:transparent; border:1px solid var(--edge); color:var(--ink); border-radius:9px; padding:8px 12px; cursor:pointer; }
+.ghost.sm{padding:5px 10px; font-size:12.5px}
+.ghost.danger{ color:var(--red); border-color:rgba(178,55,29,.4); }
+.solid:active,.ghost:active{transform:translateY(1px)}
+
+.lb{ list-style:none; margin:0; padding:0; }
+.lb li{ display:grid; grid-template-columns:26px 1fr auto auto; align-items:center; gap:10px; padding:11px 4px; border-top:1px solid var(--edge); }
+.lb li:first-child{border-top:none} .lb li.muted{opacity:.55}
+.lb-rank{ font-family:"JetBrains Mono",monospace; font-weight:700; color:var(--gold); }
+.lb-name{ font-weight:600; font-size:16px; }
+.lb-topar{ font-family:"JetBrains Mono",monospace; font-weight:700; font-size:17px; }
+.lb-strokes{ font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--ink2); min-width:74px; text-align:right; }
+
+.players-edit{ border:1px dashed var(--edge); border-radius:10px; padding:10px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
+.pe-row,.pe-add{ display:flex; gap:8px; }
+.pe-row input,.pe-add input{ flex:1; border:1px solid var(--edge); border-radius:8px; padding:8px 10px; background:#fff8e9; }
+
+.grid-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--edge); border-radius:10px; }
+.grid{ border-collapse:collapse; width:100%; font-family:"JetBrains Mono",monospace; }
+.grid th,.grid td{ border-right:1px solid var(--edge); border-bottom:1px solid var(--edge); text-align:center; padding:0; }
+.grid thead th{ background:var(--pine); color:var(--card); font-weight:500; padding:7px 6px; font-size:12px; cursor:pointer; }
+.hole-h{min-width:42px}
+.hole-h .hn{display:block; font-weight:700; font-size:15px}
+.hole-h.sel,.grid td.cell.sel{ background:rgba(198,155,60,.22); }
+.par-row th{ background:var(--felt); cursor:default; padding:4px 6px; font-weight:500; font-size:11px; opacity:.95; }
+.par-row .parcell{ color:var(--card); }
+.corner.small,.tot-h.small{font-size:11px}
+.tot-h{min-width:42px; background:var(--felt)!important}
+.sticky{ position:sticky; left:0; z-index:2; }
+.corner{ background:var(--pine); left:0; z-index:3; min-width:88px; text-align:left!important; padding-left:10px!important; }
+td.name{ background:var(--card2); text-align:left; padding:10px; font-family:"Inter"; font-weight:600; font-size:13.5px; min-width:88px; }
+.grid td.cell{ height:46px; min-width:42px; cursor:pointer; }
+.cell .dot{ color:var(--edge); }
+.grid td.tot{ font-weight:700; padding:0 8px; background:#fff8e9; }
+.grid td.tot.par.under{color:var(--red)} .grid td.tot.par.over{color:var(--navy)}
+
+.mk{ display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; font-family:"JetBrains Mono",monospace; font-weight:700; font-size:14px; color:var(--ink); }
+.mk.birdie{ color:var(--red); border:1.6px solid var(--red); border-radius:50%; }
+.mk.eagle{ color:var(--red); border:1.6px solid var(--red); border-radius:50%; box-shadow:0 0 0 2px var(--card),0 0 0 3.4px var(--red); }
+.mk.bogey{ color:var(--navy); border:1.6px solid var(--navy); border-radius:5px; }
+.mk.dbl{ color:var(--navy); border:1.6px solid var(--navy); border-radius:5px; box-shadow:0 0 0 2px var(--card),0 0 0 3.4px var(--navy); }
+
+.hole-tabs{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.htab{ width:34px; height:34px; border-radius:8px; border:1px solid var(--edge); background:#fff8e9; font-family:"JetBrains Mono",monospace; font-weight:700; cursor:pointer; color:var(--ink); }
+.htab.on{ background:var(--pine); color:var(--card); border-color:var(--pine); }
+
+.hole-ed{ border-top:1px solid var(--edge); padding-top:14px; }
+.he-head{ display:flex; align-items:center; gap:8px; }
+.he-num{ width:30px; height:30px; flex:0 0 auto; display:grid; place-items:center; border-radius:50%; background:var(--pine); color:var(--card); font-family:"JetBrains Mono",monospace; font-weight:700; font-size:14px; }
+.he-event{ flex:1; min-width:0; border:1px solid var(--edge); border-radius:8px; padding:9px 11px; background:#fff8e9; font-size:14px; }
+.he-par{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink2); }
+.he-par select{ border:1px solid var(--edge); border-radius:8px; padding:7px 6px; background:#fff8e9; font-weight:700; }
+.he-meta{ display:flex; gap:8px; margin-top:8px; }
+.he-meta input{ flex:1; border:1px solid var(--edge); border-radius:8px; padding:7px 10px; background:#fff8e9; font-size:12.5px; }
+.he-caps{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--ink2); margin:9px 0 4px; }
+
+.bet-list{ display:flex; flex-direction:column; gap:10px; }
+.bet{ border:1px solid var(--edge); border-radius:11px; padding:12px; background:#fbf5e6; }
+.bet-name{ font-weight:700; font-size:15px; margin-bottom:9px; }
+.bet-line{ display:flex; align-items:center; gap:7px; margin-bottom:7px; }
+.bl-tag{ flex:0 0 64px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:6px 0; text-align:center; border-radius:6px; color:#fff; }
+.bl-tag.dog{ background:var(--red); } .bl-tag.fav{ background:var(--ink2); }
+.bet-line .desc{ flex:1; min-width:0; border:1px solid var(--edge); border-radius:8px; padding:9px 10px; background:#fff; font-size:13.5px; }
+.bet-line .odds{ flex:0 0 72px; border:1px solid var(--edge); border-radius:8px; padding:9px 8px; background:#fff; font-family:"JetBrains Mono",monospace; font-weight:700; font-size:14px; text-align:center; }
+.bet-line .odds.warn{ border-color:var(--red); color:var(--red); }
+.bet-outcome{ display:flex; gap:6px; margin-top:3px; }
+.out{ flex:1; border:1px solid var(--edge); background:#fff; border-radius:8px; padding:8px 4px; font-size:11.5px; cursor:pointer; color:var(--ink); display:flex; flex-direction:column; align-items:center; gap:2px; }
+.out em{ font-style:normal; font-family:"JetBrains Mono",monospace; font-size:10px; opacity:.55; }
+.out.on{ color:#fff; font-weight:600; border-color:transparent; }
+.out.on em{opacity:.85}
+.out.on.dog{ background:var(--red); } .out.on.fav{ background:var(--ink2); } .out.on.miss{ background:var(--navy); }
+.bet-result{ display:flex; align-items:center; gap:9px; margin-top:10px; }
+.res-label{ font-size:13px; font-weight:600; }
+.cap-warn{ margin-top:7px; font-size:11px; color:var(--red); }
+
+.rules{padding:6px 16px}
+.rules-toggle{ width:100%; text-align:left; background:none; border:none; padding:13px 0; cursor:pointer; font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:16px; color:var(--ink); }
+.rules-body{ padding-bottom:14px; font-size:14px; line-height:1.55; color:#3a372d; }
+.rules-body ul{ margin:8px 0; padding-left:18px; } .rules-body li{ margin:6px 0; }
+.rules-body code{ font-family:"JetBrains Mono",monospace; font-size:12px; background:#fff8e9; padding:1px 5px; border-radius:5px; }
+.tag{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:5px; color:#fff; font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:700; vertical-align:middle; }
+.tag.u{ background:var(--red); } .tag.f{ background:var(--ink2); }
+.rules-body .legend{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:10px; }
+
+.empty{ text-align:center; padding:22px 8px; }
+.empty-t{ font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:18px; }
+.empty-b{ color:var(--ink2); font-size:13.5px; margin:6px auto 14px; max-width:340px; line-height:1.5; }
+.empty-actions{ display:flex; gap:9px; justify-content:center; flex-wrap:wrap; }
+
+.sg-foot{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; color:rgba(243,234,211,.7); font-size:12px; padding:6px 4px 0; }
+.foot-actions{display:flex; gap:8px}
+.sg-foot .ghost{ color:var(--card); border-color:rgba(243,234,211,.3); }
+.sg-foot .ghost.danger{ color:#f0b3a3; border-color:rgba(240,179,163,.4); }
+
+@media (max-width:480px){ .lb-strokes{min-width:58px} .bl-tag{flex-basis:54px} .bet-line .odds{flex-basis:64px} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js" crossorigin></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+/* ---- persistence: localStorage (per-device) ---- */
+const STORE_KEY = "the-tour-state-v2";
+const store = {
+  load() { try { const v = localStorage.getItem(STORE_KEY); return v ? JSON.parse(v) : null; } catch { return null; } },
+  save(s) { try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) { console.error("save failed", e); } },
+};
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+const newRound = (name) => ({ id: uid(), name, startDate: "", holes: [], scores: {} });
+const emptyState = () => { const r = newRound("Round 1"); return { title: "The Tour", players: [], rounds: [r], activeRoundId: r.id }; };
+
+const demoState = () => {
+  const r = newRound("Augusta National — Front 9");
+  r.startDate = "Oct 18";
+  r.holes = [
+    { id: uid(), event: "Browns vs. Steelers", date: "Oct 18", time: "1:00 PM", par: 5 },
+    { id: uid(), event: "Packers vs. Buccaneers", date: "Oct 18", time: "4:25 PM", par: 3 },
+  ];
+  const P = ["Kevin", "Cholmes", "Tony", "Al", "Ricky"].map((name) => ({ id: uid(), name }));
+  const [kev, cho, ton, al, ric] = P;
+  const h1 = r.holes[0].id, h2 = r.holes[1].id;
+  const set = (pid, hid, dogDesc, dog, favDesc, fav, outcome) => {
+    r.scores[pid] = r.scores[pid] || {};
+    r.scores[pid][hid] = { dogDesc, dog, favDesc, fav, outcome };
+  };
+  set(kev.id, h1, "Landry anytime TD", "+220", "Steelers +4.5", "-280", "fav");
+  set(cho.id, h1, "Claypool 1st half TD", "+310", "Big Ben 1st comp u9.5", "-113", "miss");
+  set(ton.id, h1, "Conner 1st TD for PIT", "+330", "OBJ over 4.5 rec", "-150", "miss");
+  set(al.id,  h1, "Eric Ebron to score TD", "+210", "Browns +6.5", "-186", "miss");
+  set(ric.id, h1, "Margin of victory PIT 7-12", "+475", "Race to 40 (neither)", "-575", "fav");
+  set(kev.id, h2, "Buccs -6.5", "+230", "Brady over 296.5 yds", "-110", "dog");
+  set(cho.id, h2, "A. Jones TD / Packers win", "+140", "M. Evans o4.5 rec", "-125", "miss");
+  set(ton.id, h2, "Rodgers over 0.5 INTs", "+150", "Over 55", "-105", "dog");
+  set(al.id,  h2, "Pierre-Paul sacks over 0.5", "+145", "Packers +3.5", "-186", "dog");
+  set(ric.id, h2, "Neither scores 3x in a row", "+205", "Race to 40 (neither)", "-375", "fav");
+  return { title: "The Tour", players: P, rounds: [r], activeRoundId: r.id };
+};
+
+const num = (s) => { const n = parseInt(String(s).replace(/[^0-9-]/g, ""), 10); return Number.isFinite(n) ? n : 0; };
+function computeStrokes(par, entry) {
+  if (!entry || !entry.outcome) return null;
+  if (entry.outcome === "dog") return par - Math.floor(Math.abs(num(entry.dog)) / 100);
+  if (entry.outcome === "fav") return par;
+  return par + Math.floor(Math.abs(num(entry.fav)) / 100);
+}
+function diffLabel(diff) {
+  if (diff <= -3) return "Albatross+"; if (diff === -2) return "Eagle"; if (diff === -1) return "Birdie";
+  if (diff === 0) return "Par"; if (diff === 1) return "Bogey"; if (diff === 2) return "Double bogey"; return "+" + diff;
+}
+const toPar = (d) => (d === 0 ? "E" : d > 0 ? "+" + d : "" + d);
+
+function App() {
+  const [state, setState] = useState(() => store.load() || emptyState());
+  const [activeHoleId, setActiveHoleId] = useState(null);
+  const [showRules, setShowRules] = useState(false);
+  const [managePlayers, setManagePlayers] = useState(false);
+  const [newPlayer, setNewPlayer] = useState("");
+  const saveTimer = useRef(null);
+
+  useEffect(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => store.save(state), 300);
+  }, [state]);
+
+  const round = state.rounds.find((r) => r.id === state.activeRoundId) || state.rounds[0];
+  const update = (fn) => setState((s) => { const c = structuredClone(s); fn(c); return c; });
+  const curRound = (c) => c.rounds.find((r) => r.id === c.activeRoundId) || c.rounds[0];
+
+  const addPlayer = () => { const name = newPlayer.trim(); if (!name) return; update((c) => { c.players.push({ id: uid(), name }); }); setNewPlayer(""); };
+  const removePlayer = (pid) => update((c) => { c.players = c.players.filter((p) => p.id !== pid); c.rounds.forEach((r) => { delete r.scores[pid]; }); });
+  const renamePlayer = (pid, name) => update((c) => { const p = c.players.find((x) => x.id === pid); if (p) p.name = name; });
+
+  const addRound = () => update((c) => { const r = newRound("Round " + (c.rounds.length + 1)); c.rounds.push(r); c.activeRoundId = r.id; });
+  const renameRound = (name) => update((c) => { curRound(c).name = name; });
+  const setRoundDate = (d) => update((c) => { curRound(c).startDate = d; });
+  const removeRound = () => update((c) => { if (c.rounds.length <= 1) return; c.rounds = c.rounds.filter((r) => r.id !== c.activeRoundId); c.activeRoundId = c.rounds[0].id; });
+
+  const addHole = () => update((c) => { const r = curRound(c); const h = { id: uid(), event: "", date: "", time: "", par: 4 }; r.holes.push(h); setTimeout(() => setActiveHoleId(h.id), 0); });
+  const updateHole = (hid, patch) => update((c) => { const h = curRound(c).holes.find((x) => x.id === hid); if (h) Object.assign(h, patch); });
+  const removeHole = (hid) => update((c) => { const r = curRound(c); r.holes = r.holes.filter((x) => x.id !== hid); Object.values(r.scores).forEach((m) => delete m[hid]); });
+
+  const setScore = (pid, hid, patch) => update((c) => {
+    const r = curRound(c); r.scores[pid] = r.scores[pid] || {};
+    r.scores[pid][hid] = { dogDesc: "", dog: "", favDesc: "", fav: "", outcome: null, ...(r.scores[pid][hid] || {}), ...patch };
+  });
+
+  const loadDemo = () => { setState(demoState()); setActiveHoleId(null); };
+  const resetAll = () => { if (!confirm("Clear everything? This can't be undone.")) return; setState(emptyState()); setActiveHoleId(null); };
+
+  const getEntry = (pid, hid) => (round.scores[pid] && round.scores[pid][hid]) || null;
+  const playerTotals = (pid) => {
+    let strokes = 0, parPlayed = 0, played = 0;
+    round.holes.forEach((h) => { const st = computeStrokes(h.par, getEntry(pid, h.id)); if (st != null) { strokes += st; parPlayed += h.par; played += 1; } });
+    return { strokes, diff: strokes - parPlayed, played };
+  };
+  const leaderboard = [...state.players].map((p) => ({ ...p, ...playerTotals(p.id) }))
+    .sort((a, b) => (a.played === 0) - (b.played === 0) || a.diff - b.diff || a.strokes - b.strokes);
+  const totalPar = round.holes.reduce((a, h) => a + h.par, 0);
+  const activeHole = round.holes.find((h) => h.id === activeHoleId) || null;
+
+  return (
+    <div className="sg-root">
+      <header className="sg-header">
+        <div className="sg-eyebrow">Scorecard · betting links</div>
+        <input className="sg-title" value={state.title} spellCheck={false} aria-label="Game title"
+          onChange={(e) => update((c) => { c.title = e.target.value || "The Tour"; })} />
+        <div className="sg-roundbar">
+          {state.rounds.map((r) => (
+            <button key={r.id} className={"sg-chip" + (r.id === state.activeRoundId ? " on" : "")}
+              onClick={() => { update((c) => { c.activeRoundId = r.id; }); setActiveHoleId(null); }}>{r.name}</button>
+          ))}
+          <button className="sg-chip add" onClick={addRound}>+ Round</button>
+        </div>
+      </header>
+
+      <main className="sg-main">
+        <section className="sg-card meta">
+          <div className="meta-row">
+            <input className="round-name" value={round.name} onChange={(e) => renameRound(e.target.value)} aria-label="Round name" />
+            {state.rounds.length > 1 && <button className="ghost danger sm" onClick={removeRound}>Delete</button>}
+          </div>
+          <div className="meta-row sub">
+            <input className="round-date" placeholder="Start date (e.g. Oct 18)" value={round.startDate} onChange={(e) => setRoundDate(e.target.value)} />
+            <span className="meta-sub">{round.holes.length} {round.holes.length === 1 ? "hole" : "holes"} · par {totalPar}</span>
+          </div>
+        </section>
+
+        <section className="sg-card">
+          <div className="card-head">
+            <h2>Leaderboard</h2>
+            <button className="ghost sm" onClick={() => setManagePlayers((v) => !v)}>{managePlayers ? "Done" : "Players"}</button>
+          </div>
+          {managePlayers && (
+            <div className="players-edit">
+              {state.players.map((p) => (
+                <div className="pe-row" key={p.id}>
+                  <input value={p.name} onChange={(e) => renamePlayer(p.id, e.target.value)} />
+                  <button className="ghost danger sm" onClick={() => removePlayer(p.id)}>Remove</button>
+                </div>
+              ))}
+              <div className="pe-add">
+                <input placeholder="Add a player…" value={newPlayer} onChange={(e) => setNewPlayer(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addPlayer()} />
+                <button className="solid sm" onClick={addPlayer}>Add</button>
+              </div>
+            </div>
+          )}
+          {state.players.length === 0 ? (
+            <div className="empty">
+              <div className="empty-t">No players yet</div>
+              <div className="empty-b">Tap Players to add the group, then add your holes below.</div>
+              <div className="empty-actions">
+                <button className="solid" onClick={() => setManagePlayers(true)}>Add players</button>
+                <button className="ghost" onClick={loadDemo}>Load demo round</button>
+              </div>
+            </div>
+          ) : (
+            <ol className="lb">
+              {leaderboard.map((p, i) => (
+                <li key={p.id} className={p.played === 0 ? "muted" : ""}>
+                  <span className="lb-rank">{p.played === 0 ? "—" : i + 1}</span>
+                  <span className="lb-name">{p.name}</span>
+                  <span className="lb-topar">{p.played === 0 ? "—" : toPar(p.diff)}</span>
+                  <span className="lb-strokes">{p.played === 0 ? "no scores" : p.strokes + " thru " + p.played}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        {state.players.length > 0 && round.holes.length > 0 && (
+          <section className="sg-card">
+            <div className="card-head"><h2>Card</h2><span className="hint">tap a hole to score it</span></div>
+            <div className="grid-scroll">
+              <table className="grid">
+                <thead>
+                  <tr>
+                    <th className="sticky corner">Hole</th>
+                    {round.holes.map((h, i) => (
+                      <th key={h.id} className={"hole-h" + (h.id === activeHoleId ? " sel" : "")} onClick={() => setActiveHoleId(h.id)}>
+                        <span className="hn">{i + 1}</span>
+                      </th>
+                    ))}
+                    <th className="tot-h">Tot</th><th className="tot-h">±</th>
+                  </tr>
+                  <tr className="par-row">
+                    <th className="sticky corner small">Par</th>
+                    {round.holes.map((h) => <th key={h.id} className="parcell">{h.par}</th>)}
+                    <th className="tot-h small">{totalPar}</th><th className="tot-h"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.players.map((p) => {
+                    const t = playerTotals(p.id);
+                    return (
+                      <tr key={p.id}>
+                        <td className="sticky name">{p.name}</td>
+                        {round.holes.map((h) => {
+                          const st = computeStrokes(h.par, getEntry(p.id, h.id));
+                          return (
+                            <td key={h.id} className={"cell" + (h.id === activeHoleId ? " sel" : "")} onClick={() => setActiveHoleId(h.id)}>
+                              {st == null ? <span className="dot">·</span> : <Mark strokes={st} par={h.par} />}
+                            </td>
+                          );
+                        })}
+                        <td className="tot">{t.played ? t.strokes : "–"}</td>
+                        <td className={"tot par " + (t.diff < 0 ? "under" : t.diff > 0 ? "over" : "")}>{t.played ? toPar(t.diff) : "–"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        <section className="sg-card">
+          <div className="card-head"><h2>Holes</h2><button className="solid sm" onClick={addHole}>+ Add hole</button></div>
+          {round.holes.length === 0 ? (
+            <div className="empty">
+              <div className="empty-t">No holes yet</div>
+              <div className="empty-b">Each hole is one sporting event. Add one and set its par — that sets the betting caps.</div>
+              <div className="empty-actions"><button className="solid" onClick={addHole}>Add first hole</button></div>
+            </div>
+          ) : (
+            <>
+              <div className="hole-tabs">
+                {round.holes.map((h, i) => (
+                  <button key={h.id} className={"htab" + (h.id === activeHoleId ? " on" : "")}
+                    onClick={() => setActiveHoleId(h.id === activeHoleId ? null : h.id)}>{i + 1}</button>
+                ))}
+              </div>
+              {activeHole ? (
+                <HoleEditor hole={activeHole} index={round.holes.findIndex((h) => h.id === activeHole.id) + 1}
+                  players={state.players} getEntry={getEntry} setScore={setScore} updateHole={updateHole}
+                  removeHole={(id) => { removeHole(id); setActiveHoleId(null); }} />
+              ) : <p className="hint pad">Pick a hole number above to enter everyone's bets.</p>}
+            </>
+          )}
+        </section>
+
+        <section className="sg-card rules">
+          <button className="rules-toggle" onClick={() => setShowRules((v) => !v)}>How scoring works {showRules ? "▾" : "▸"}</button>
+          {showRules && (
+            <div className="rules-body">
+              <p>Each <b>hole is one sporting event</b>. For each, pick a <b>favorite</b> bet and an <b>underdog</b> bet — and you must be able to win both (no betting both sides of one line).</p>
+              <ul>
+                <li><b>Caps:</b> favorite no further than <code>-(100×par+99)</code> (−499 on a par 4); underdog no further than <code>+(100×par−1)</code> (+399 on a par 4).</li>
+                <li><b>Underdog hits</b> <span className="tag u">U</span> → 1 under par per 100 pts. +100–199 birdie, +200–299 eagle.</li>
+                <li><b>Underdog misses, favorite hits</b> <span className="tag f">F</span> → par.</li>
+                <li><b>Both miss</b> → 1 over par per 100 pts of the favorite. −105 to −199 bogey, −200 to −299 double.</li>
+              </ul>
+              <p className="legend"><Mark strokes={2} par={4} /> under par &nbsp; <Mark strokes={5} par={4} /> over par &nbsp;— circles run under, squares run over, like a real card.</p>
+            </div>
+          )}
+        </section>
+
+        <footer className="sg-foot">
+          <span>Saved to this device · {state.players.length} players</span>
+          <div className="foot-actions">
+            <button className="ghost sm" onClick={loadDemo}>Load demo</button>
+            <button className="ghost danger sm" onClick={resetAll}>Reset all</button>
+          </div>
+        </footer>
+      </main>
+    </div>
+  );
+}
+
+function Mark({ strokes, par }) {
+  const diff = strokes - par;
+  let cls = "mk";
+  if (diff <= -2) cls += " eagle"; else if (diff === -1) cls += " birdie";
+  else if (diff === 1) cls += " bogey"; else if (diff >= 2) cls += " dbl";
+  return <span className={cls} title={diffLabel(diff)}>{strokes}</span>;
+}
+
+function HoleEditor({ hole, index, players, getEntry, setScore, updateHole, removeHole }) {
+  const favCap = 100 * hole.par + 99;
+  const dogCap = 100 * hole.par - 1;
+  return (
+    <div className="hole-ed">
+      <div className="he-head">
+        <span className="he-num">{index}</span>
+        <input className="he-event" placeholder="Game (e.g. Browns vs. Steelers)" value={hole.event}
+          onChange={(e) => updateHole(hole.id, { event: e.target.value })} />
+        <label className="he-par">par
+          <select value={hole.par} onChange={(e) => updateHole(hole.id, { par: parseInt(e.target.value, 10) })}>
+            {[3, 4, 5, 6].map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+        <button className="ghost danger sm" onClick={() => removeHole(hole.id)}>✕</button>
+      </div>
+      <div className="he-meta">
+        <input placeholder="Date (Oct 18)" value={hole.date} onChange={(e) => updateHole(hole.id, { date: e.target.value })} />
+        <input placeholder="Tee time (4:25 PM)" value={hole.time} onChange={(e) => updateHole(hole.id, { time: e.target.value })} />
+      </div>
+      <div className="he-caps">favorite limit −{favCap} · underdog limit +{dogCap}</div>
+      {players.length === 0 ? <p className="hint pad">Add players first to enter bets.</p> : (
+        <div className="bet-list">
+          {players.map((p) => {
+            const e = getEntry(p.id, hole.id) || { dogDesc: "", dog: "", favDesc: "", fav: "", outcome: null };
+            const st = computeStrokes(hole.par, e);
+            const favOver = e.fav !== "" && Math.abs(num(e.fav)) > favCap;
+            const dogOver = e.dog !== "" && num(e.dog) > dogCap;
+            return (
+              <div className="bet" key={p.id}>
+                <div className="bet-name">{p.name}</div>
+                <div className="bet-line">
+                  <span className="bl-tag dog">Underdog</span>
+                  <input className="desc" placeholder="bet (e.g. Buccs -6.5)" value={e.dogDesc}
+                    onChange={(ev) => setScore(p.id, hole.id, { dogDesc: ev.target.value })} />
+                  <input className={"odds" + (dogOver ? " warn" : "")} inputMode="numeric" placeholder="+230" value={e.dog}
+                    onChange={(ev) => setScore(p.id, hole.id, { dog: ev.target.value })} />
+                </div>
+                <div className="bet-line">
+                  <span className="bl-tag fav">Favorite</span>
+                  <input className="desc" placeholder="bet (e.g. Brady o296.5 yds)" value={e.favDesc}
+                    onChange={(ev) => setScore(p.id, hole.id, { favDesc: ev.target.value })} />
+                  <input className={"odds" + (favOver ? " warn" : "")} inputMode="numeric" placeholder="-110" value={e.fav}
+                    onChange={(ev) => setScore(p.id, hole.id, { fav: ev.target.value })} />
+                </div>
+                <div className="bet-outcome">
+                  {[["dog", "Underdog won", "U"], ["fav", "Favorite won", "F"], ["miss", "Both missed", "—"]].map(([k, label, tg]) => (
+                    <button key={k} className={"out" + (e.outcome === k ? " on " + k : "")}
+                      onClick={() => setScore(p.id, hole.id, { outcome: e.outcome === k ? null : k })}>
+                      {label}<em>{tg}</em>
+                    </button>
+                  ))}
+                </div>
+                <div className="bet-result">
+                  {st == null ? <span className="hint">no result yet</span>
+                    : <><Mark strokes={st} par={hole.par} /><span className="res-label">{diffLabel(st - hole.par)}</span></>}
+                </div>
+                {(favOver || dogOver) && <div className="cap-warn">over the par cap — allowed, just flagging it</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
