@@ -18,7 +18,7 @@
 *{box-sizing:border-box}
 html,body{margin:0}
 .sg-root{ min-height:100vh; color:var(--ink); font-family:"Inter",system-ui,sans-serif;
-  background:radial-gradient(120% 60% at 50% -10%, #1c4a3a 0%, var(--pine) 45%, var(--pine2) 100%); padding-bottom:48px; }
+  background:radial-gradient(120% 60% at 50% -10%, #1c4a3a 0%, var(--pine) 45%, var(--pine2) 100%); padding-bottom:48px; overflow-x:hidden; }
 input,select,button{font-family:inherit}
 .sg-header{ padding:22px 18px 8px; max-width:760px; margin:0 auto; }
 .sg-toprow{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
@@ -107,8 +107,8 @@ td.name{ background:var(--card2); text-align:left; padding:10px; font-family:"In
 .he-event{ flex:1; min-width:0; border:1px solid var(--edge); border-radius:8px; padding:9px 11px; background:#fff8e9; font-size:14px; }
 .he-par{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink2); }
 .he-par select{ border:1px solid var(--edge); border-radius:8px; padding:7px 6px; background:#fff8e9; font-weight:700; }
-.he-meta{ display:flex; gap:8px; margin-top:8px; }
-.he-meta input{ flex:1; border:1px solid var(--edge); border-radius:8px; padding:7px 10px; background:#fff8e9; font-size:12.5px; }
+.he-meta{ display:flex; gap:8px; margin-top:8px; width:100%; }
+.he-meta input{ flex:1; min-width:0; border:1px solid var(--edge); border-radius:8px; padding:7px 10px; background:#fff8e9; font-size:12.5px; }
 .he-caps{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--ink2); margin:9px 0 4px; }
 
 .bet-list{ display:flex; flex-direction:column; gap:10px; }
@@ -386,13 +386,20 @@ function App() {
     if (e) e.shots = (e.shots || []).filter((u) => u !== url);
   });
   const uploadShot = async (pid, hid, file) => {
-    if (!SB) { alert("Add your Supabase keys (and a 'picks' storage bucket) to upload screenshots."); return false; }
+    if (!SB) { alert("Add your Supabase keys to upload screenshots."); return false; }
     try {
       const blob = await compressImage(file);
       const path = ROOM + "/" + round.id + "/" + hid + "/" + pid + "-" + Date.now() + ".jpg";
-      const up = await SB.storage.from("picks").upload(path, blob, { contentType: "image/jpeg", upsert: true });
-      if (up.error) throw up.error;
-      const { data } = SB.storage.from("picks").getPublicUrl(path);
+      const up = await SB.storage.from("Picks").upload(path, blob, { contentType: "image/jpeg", upsert: true });
+      if (up.error) {
+        if (up.error.message && up.error.message.toLowerCase().includes("bucket")) {
+          alert("Storage bucket not set up yet.\n\nIn your Supabase dashboard:\n1. Go to Storage (left sidebar)\n2. Click \"New bucket\"\n3. Name it exactly: picks\n4. Check \"Public bucket\"\n5. Click Save\n\nThen try uploading again.");
+        } else {
+          throw up.error;
+        }
+        return false;
+      }
+      const { data } = SB.storage.from("Picks").getPublicUrl(path);
       addShot(pid, hid, data.publicUrl);
       return true;
     } catch (e) { console.error(e); alert("Upload failed: " + (e.message || e)); return false; }
