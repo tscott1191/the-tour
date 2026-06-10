@@ -146,6 +146,23 @@ td.name{ background:var(--card2); text-align:left; padding:10px; font-family:"In
 
 .whoami{ display:flex; align-items:center; gap:8px; margin-top:12px; font-size:12.5px; color:rgba(243,234,211,.9); }
 .whoami select{ border:1px solid rgba(243,234,211,.32); background:rgba(0,0,0,.18); color:var(--card); border-radius:8px; padding:6px 9px; font-size:13px; }
+.whoami-user{ display:flex; align-items:center; gap:10px; margin-top:12px; font-size:13px; color:rgba(243,234,211,.9); flex-wrap:wrap; }
+.whoami-user b{ color:var(--card); font-weight:600; }
+.whoami-user .ghost{ padding:4px 10px; font-size:12px; color:rgba(243,234,211,.8); border-color:rgba(243,234,211,.3); }
+.auth-screen{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; gap:16px;
+  background:radial-gradient(120% 60% at 50% -10%, #1c4a3a 0%, var(--pine) 45%, var(--pine2) 100%); }
+.auth-logo{ font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:42px; color:var(--card); letter-spacing:-.02em; }
+.auth-eyebrow{ font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--gold); opacity:.9; }
+.auth-card{ background:var(--card); border:1px solid var(--edge); border-radius:16px; padding:24px; width:100%; max-width:360px;
+  display:flex; flex-direction:column; gap:14px; box-shadow:0 12px 40px -12px rgba(0,0,0,.5); }
+.auth-card h2{ margin:0; font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:22px; }
+.auth-card p{ margin:0; font-size:14px; color:var(--ink2); line-height:1.55; }
+.auth-fields{ display:flex; flex-direction:column; gap:9px; }
+.auth-fields input{ border:1px solid var(--edge); border-radius:9px; padding:12px 13px; background:#fff8e9; font-size:16px; width:100%; }
+.auth-fields input:focus{ outline:none; box-shadow:0 0 0 2px var(--gold); }
+.auth-error{ font-size:13px; color:var(--red); background:rgba(178,55,29,.08); border-radius:8px; padding:8px 11px; }
+.auth-switch{ font-size:12.5px; color:var(--ink2); border-color:transparent; text-align:center; }
+.player-pick{ display:flex; flex-direction:column; gap:9px; }
 .bet.mine{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
 .you-pill{ font-size:10px; font-weight:700; color:var(--pine); background:var(--gold); border-radius:5px; padding:2px 6px; margin-left:7px; vertical-align:middle; }
 .lock-btn{ width:100%; border:1px solid var(--edge); background:#fff8e9; border-radius:8px; padding:9px 10px; font-size:12.5px; cursor:pointer; color:var(--ink); text-align:left; }
@@ -309,8 +326,14 @@ function App() {
   const [showRules, setShowRules] = useState(false);
   const [managePlayers, setManagePlayers] = useState(false);
   const [newPlayer, setNewPlayer] = useState("");
-  const [me, setMe] = useState(() => { try { return localStorage.getItem("the-tour-me-" + ROOM) || ""; } catch { return ""; } });
-  const setMeId = (id) => { setMe(id); try { localStorage.setItem("the-tour-me-" + ROOM, id); } catch {} };
+  // Auth — when SB is active identity comes from Supabase Auth + player_links table
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(!!SB);
+  const [myPlayerId, setMyPlayerId] = useState(null);
+  // Local fallback when no Supabase (shouldn't happen with keys set, but kept as safety net)
+  const [localMe, setLocalMe] = useState(() => { try { return localStorage.getItem("the-tour-me-" + ROOM) || ""; } catch { return ""; } });
+  const setLocalMeId = (id) => { setLocalMe(id); try { localStorage.setItem("the-tour-me-" + ROOM, id); } catch {} };
+  const me = SB ? myPlayerId : localMe;
   const saveTimer = useRef(null);
   const lastSyncedJson = useRef(null);
   const stateRef = useRef(state);
@@ -353,6 +376,21 @@ function App() {
       catch (e) { console.error("save failed", e); setSync("err"); }
     }, 350);
   }, [state]);
+
+  // auth session
+  useEffect(() => {
+    if (!SB) return;
+    SB.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
+    const { data: { subscription } } = SB.auth.onAuthStateChange((_e, s) => { setSession(s); if (!s) setMyPlayerId(null); });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // load player link when session is established
+  useEffect(() => {
+    if (!SB || !session) { setMyPlayerId(null); return; }
+    SB.from("player_links").select("player_id").eq("room", ROOM).eq("user_id", session.user.id).maybeSingle()
+      .then(({ data }) => { if (data) setMyPlayerId(data.player_id); });
+  }, [session]);
 
   const round = state.rounds.find((r) => r.id === state.activeRoundId) || state.rounds[0];
   const update = (fn) => setState((s) => { const c = structuredClone(s); fn(c); return c; });
@@ -408,6 +446,17 @@ function App() {
   const loadDemo = () => { setState(demoState()); setActiveHoleId(null); };
   const resetAll = () => { if (!confirm("Clear everything for everyone on this card? This can't be undone.")) return; setState(emptyState()); setActiveHoleId(null); };
 
+  // Auth gates
+  if (SB && authLoading) return (
+    <div style={{ minHeight:"100vh", background:"var(--pine)", display:"grid", placeItems:"center", color:"var(--card)", fontFamily:"system-ui" }}>
+      Loading…
+    </div>
+  );
+  if (SB && !session) return <LoginForm />;
+  if (SB && session && !myPlayerId && state.players.length > 0) return (
+    <PlayerLinker players={state.players} session={session} onLink={setMyPlayerId} />
+  );
+
   const getEntry = (pid, hid) => (round.scores[pid] && round.scores[pid][hid]) || null;
   const playerTotals = (pid) => {
     let strokes = 0, parPlayed = 0, played = 0;
@@ -437,15 +486,20 @@ function App() {
           ))}
           <button className="sg-chip add" onClick={addRound}>+ Round</button>
         </div>
-        {state.players.length > 0 && (
+        {SB && session && me ? (
+          <div className="whoami-user">
+            <span>Signed in as <b>{state.players.find(p => p.id === me)?.name || "…"}</b></span>
+            <button className="ghost" onClick={() => SB.auth.signOut()}>Sign out</button>
+          </div>
+        ) : !SB && state.players.length > 0 ? (
           <div className="whoami">
             <span>You:</span>
-            <select value={me} onChange={(e) => setMeId(e.target.value)}>
+            <select value={localMe} onChange={(e) => setLocalMeId(e.target.value)}>
               <option value="">— pick your name —</option>
               {state.players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-        )}
+        ) : null}
       </header>
 
       <main className="sg-main">
@@ -599,6 +653,110 @@ function App() {
           </div>
         </footer>
       </main>
+    </div>
+  );
+}
+
+function LoginForm() {
+  const [mode, setMode] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const submit = async () => {
+    if (!email || !password) return;
+    setLoading(true); setError("");
+    try {
+      if (mode === "signup") {
+        const { error } = await SB.auth.signUp({ email, password });
+        if (error) throw error;
+        setSent(true);
+      } else {
+        const { error } = await SB.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (e) { setError(e.message || String(e)); }
+    finally { setLoading(false); }
+  };
+
+  if (sent) return (
+    <div className="auth-screen">
+      <div className="auth-eyebrow">Scorecard · betting links</div>
+      <div className="auth-logo">The Tour</div>
+      <div className="auth-card">
+        <h2>Check your email</h2>
+        <p>We sent a confirmation link to <b>{email}</b>. Click it then come back and sign in.</p>
+        <p style={{fontSize:12, color:"var(--ink2)"}}>Tip: ask the admin to turn off email confirmation in Supabase so this step isn't needed.</p>
+        <button className="ghost sm auth-switch" onClick={() => { setSent(false); setMode("signin"); }}>Back to sign in</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-eyebrow">Scorecard · betting links</div>
+      <div className="auth-logo">The Tour</div>
+      <div className="auth-card">
+        <h2>{mode === "signin" ? "Sign in" : "Create account"}</h2>
+        <div className="auth-fields">
+          <input type="email" placeholder="Email" value={email} autoComplete="email"
+            onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
+          <input type="password" placeholder="Password" value={password} autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
+        </div>
+        {error && <div className="auth-error">{error}</div>}
+        <button className="solid" onClick={submit} disabled={loading || !email || !password}>
+          {loading ? "…" : mode === "signin" ? "Sign in" : "Create account"}
+        </button>
+        <button className="ghost auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}>
+          {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PlayerLinker({ players, session, onLink }) {
+  const [claimed, setClaimed] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    SB.from("player_links").select("player_id").eq("room", ROOM)
+      .then(({ data }) => { if (data) setClaimed(data.map(r => r.player_id)); });
+  }, []);
+
+  const claim = async (pid) => {
+    setLoading(true);
+    const { error } = await SB.from("player_links").insert({ room: ROOM, player_id: pid, user_id: session.user.id });
+    setLoading(false);
+    if (error) { alert("Couldn't link player: " + error.message); return; }
+    onLink(pid);
+  };
+
+  const available = players.filter(p => !claimed.includes(p.id));
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-eyebrow">Scorecard · betting links</div>
+      <div className="auth-logo">The Tour</div>
+      <div className="auth-card">
+        <h2>Who are you?</h2>
+        {available.length === 0 ? (
+          <p>All players are claimed. Ask the admin to add you as a player first.</p>
+        ) : (
+          <>
+            <p>Pick your name to link it to your account. You only do this once.</p>
+            <div className="player-pick">
+              {available.map(p => (
+                <button key={p.id} className="solid" onClick={() => claim(p.id)} disabled={loading}>{p.name}</button>
+              ))}
+            </div>
+          </>
+        )}
+        <button className="ghost auth-switch" onClick={() => SB.auth.signOut()}>Sign out</button>
+      </div>
     </div>
   );
 }
