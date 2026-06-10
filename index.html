@@ -241,6 +241,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 /* Each group/card is a "room". Add #anything to the page URL to use a
    separate shared card, e.g. .../the-tour/#sunday-crew  */
 const ROOM = (location.hash.slice(1).trim() || "main");
+const ADMIN_EMAIL = "tscott1191@gmail.com";
 const LS_KEY = "the-tour-state-v2-" + ROOM;
 
 const { useState, useEffect, useRef } = React;
@@ -381,6 +382,7 @@ function App() {
   const [localMe, setLocalMe] = useState(() => { try { return localStorage.getItem("the-tour-me-" + ROOM) || ""; } catch { return ""; } });
   const setLocalMeId = (id) => { setLocalMe(id); try { localStorage.setItem("the-tour-me-" + ROOM, id); } catch {} };
   const me = SB ? myPlayerId : localMe;
+  const isAdmin = !!(session && session.user && session.user.email === ADMIN_EMAIL);
   const saveTimer = useRef(null);
   const lastSyncedJson = useRef(null);
   const stateRef = useRef(state);
@@ -531,7 +533,7 @@ function App() {
             <button key={r.id} className={"sg-chip" + (r.id === state.activeRoundId ? " on" : "")}
               onClick={() => { update((c) => { c.activeRoundId = r.id; }); setActiveHoleId(null); }}>{r.name}</button>
           ))}
-          <button className="sg-chip add" onClick={addRound}>+ Round</button>
+          {isAdmin && <button className="sg-chip add" onClick={addRound}>+ Round</button>}
         </div>
         {SB && session && me ? (
           <div className="whoami-user">
@@ -552,11 +554,13 @@ function App() {
       <main className="sg-main">
         <section className="sg-card meta">
           <div className="meta-row">
-            <input className="round-name" value={round.name} onChange={(e) => renameRound(e.target.value)} aria-label="Round name" />
-            {state.rounds.length > 1 && <button className="ghost danger sm" onClick={removeRound}>Delete</button>}
+            <input className="round-name" value={round.name} readOnly={!isAdmin}
+              onChange={(e) => isAdmin && renameRound(e.target.value)} aria-label="Round name" />
+            {isAdmin && state.rounds.length > 1 && <button className="ghost danger sm" onClick={removeRound}>Delete</button>}
           </div>
           <div className="meta-row sub">
-            <input className="round-date" placeholder="Start date (e.g. Oct 18)" value={round.startDate} onChange={(e) => setRoundDate(e.target.value)} />
+            <input className="round-date" placeholder="Start date (e.g. Oct 18)" value={round.startDate} readOnly={!isAdmin}
+              onChange={(e) => isAdmin && setRoundDate(e.target.value)} />
             <span className="meta-sub">{round.holes.length} {round.holes.length === 1 ? "hole" : "holes"} · par {totalPar}</span>
           </div>
         </section>
@@ -564,7 +568,7 @@ function App() {
         <section className="sg-card">
           <div className="card-head">
             <h2>Leaderboard</h2>
-            <button className="ghost sm" onClick={() => setManagePlayers((v) => !v)}>{managePlayers ? "Done" : "Players"}</button>
+            {isAdmin && <button className="ghost sm" onClick={() => setManagePlayers((v) => !v)}>{managePlayers ? "Done" : "Players"}</button>}
           </div>
           {managePlayers && (
             <div className="players-edit">
@@ -651,12 +655,12 @@ function App() {
         )}
 
         <section className="sg-card">
-          <div className="card-head"><h2>Holes</h2><button className="solid sm" onClick={addHole}>+ Add hole</button></div>
+          <div className="card-head"><h2>Holes</h2>{isAdmin && <button className="solid sm" onClick={addHole}>+ Add hole</button>}</div>
           {round.holes.length === 0 ? (
             <div className="empty">
               <div className="empty-t">No holes yet</div>
-              <div className="empty-b">Each hole is one sporting event. Add one and set its par — that sets the betting caps.</div>
-              <div className="empty-actions"><button className="solid" onClick={addHole}>Add first hole</button></div>
+              <div className="empty-b">{isAdmin ? "Each hole is one sporting event. Add one and set its par — that sets the betting caps." : "No holes have been added yet. Check back soon."}</div>
+              <div className="empty-actions">{isAdmin && <button className="solid" onClick={addHole}>Add first hole</button>}</div>
             </div>
           ) : (
             <>
@@ -668,7 +672,7 @@ function App() {
               </div>
               {activeHole ? (
                 <HoleEditor hole={activeHole} index={round.holes.findIndex((h) => h.id === activeHole.id) + 1}
-                  players={state.players} me={me} getEntry={getEntry} setScore={setScore} updateHole={updateHole}
+                  players={state.players} me={me} isAdmin={isAdmin} getEntry={getEntry} setScore={setScore} updateHole={updateHole}
                   uploadShot={uploadShot} removeShot={removeShot}
                   removeHole={(id) => { removeHole(id); setActiveHoleId(null); }} />
               ) : <p className="hint pad">Pick a hole number above to enter everyone's bets.</p>}
@@ -816,7 +820,7 @@ function Mark({ strokes, par }) {
   return <span className={cls} title={diffLabel(diff)}>{strokes}</span>;
 }
 
-function HoleEditor({ hole, index, players, me, getEntry, setScore, updateHole, removeHole, uploadShot, removeShot }) {
+function HoleEditor({ hole, index, players, me, isAdmin, getEntry, setScore, updateHole, removeHole, uploadShot, removeShot }) {
   const favCap = 100 * hole.par + 99;
   const dogCap = 100 * hole.par - 1;
   const locked = !!hole.locked;
@@ -905,8 +909,8 @@ function HoleEditor({ hole, index, players, me, getEntry, setScore, updateHole, 
         ) : null}
         <div className="bet-outcome">
           {[["dog", "Underdog won", "U"], ["fav", "Favorite won", "F"], ["miss", "Both missed", "—"]].map(([k, label, tg]) => (
-            <button key={k} disabled={!locked} className={"out" + (e.outcome === k ? " on " + k : "")}
-              onClick={() => locked && setScore(p.id, hole.id, { outcome: e.outcome === k ? null : k })}>
+            <button key={k} disabled={!locked || !isAdmin} className={"out" + (e.outcome === k ? " on " + k : "")}
+              onClick={() => (locked && isAdmin) && setScore(p.id, hole.id, { outcome: e.outcome === k ? null : k })}>
               {label}<em>{tg}</em>
             </button>
           ))}
@@ -924,23 +928,31 @@ function HoleEditor({ hole, index, players, me, getEntry, setScore, updateHole, 
     <div className="hole-ed">
       <div className="he-head">
         <span className="he-num">{index}</span>
-        <input className="he-event" placeholder="Game (e.g. Browns vs. Steelers)" value={hole.event}
-          onChange={(e) => updateHole(hole.id, { event: e.target.value })} />
+        <input className="he-event" placeholder="Game (e.g. Browns vs. Steelers)" value={hole.event} readOnly={!isAdmin}
+          onChange={(e) => isAdmin && updateHole(hole.id, { event: e.target.value })} />
         <label className="he-par">par
-          <select value={hole.par} onChange={(e) => updateHole(hole.id, { par: parseInt(e.target.value, 10) })}>
+          <select value={hole.par} disabled={!isAdmin}
+            onChange={(e) => isAdmin && updateHole(hole.id, { par: parseInt(e.target.value, 10) })}>
             {[3, 4, 5, 6].map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
-        <button className="ghost danger sm" onClick={() => removeHole(hole.id)}>✕</button>
+        {isAdmin && <button className="ghost danger sm" onClick={() => removeHole(hole.id)}>✕</button>}
       </div>
       <div className="he-meta">
-        <input placeholder="Date (Oct 18)" value={hole.date} onChange={(e) => updateHole(hole.id, { date: e.target.value })} />
-        <input placeholder="Tee time (4:25 PM)" value={hole.time} onChange={(e) => updateHole(hole.id, { time: e.target.value })} />
+        <input placeholder="Date (Oct 18)" value={hole.date} readOnly={!isAdmin}
+          onChange={(e) => isAdmin && updateHole(hole.id, { date: e.target.value })} />
+        <input placeholder="Tee time (4:25 PM)" value={hole.time} readOnly={!isAdmin}
+          onChange={(e) => isAdmin && updateHole(hole.id, { time: e.target.value })} />
       </div>
-      <button className={"lock-btn" + (locked ? " on" : "")} style={{ marginTop: 8 }}
-        onClick={() => updateHole(hole.id, { locked: !locked })}>
-        {locked ? "🔒 Picks revealed & locked — tap to reopen" : "🔓 Lock & reveal picks (" + subCount + "/" + players.length + " submitted)"}
-      </button>
+      {isAdmin && (
+        <button className={"lock-btn" + (locked ? " on" : "")} style={{ marginTop: 8 }}
+          onClick={() => updateHole(hole.id, { locked: !locked })}>
+          {locked ? "🔒 Picks revealed & locked — tap to reopen" : "🔓 Lock & reveal picks (" + subCount + "/" + players.length + " submitted)"}
+        </button>
+      )}
+      {!isAdmin && locked && (
+        <div className="lock-note" style={{marginTop:8}}>🔒 Picks are locked</div>
+      )}
       <div className="he-caps">favorite limit −{favCap} · underdog limit +{dogCap}</div>
 
       {players.length === 0 ? <p className="hint pad">Add players first to enter bets.</p> : locked ? (
