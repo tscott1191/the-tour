@@ -307,51 +307,58 @@ async function readSlip(file) {
     const raw = (res && res.data && res.data.text) || "";
     const lines = raw.split("\n").map(l => l.replace(/[−–—]/g, "-").trim()).filter(Boolean);
 
-    const BET_TYPE = /MONEYLINE|PUCK\s*LINE|SPREAD|TOTAL\s*GOALS?|OVER\/UNDER|\bOVER\b|\bUNDER\b|FIRST\s*HALF|PLAYER\s*PROP|GAME\s*PROP|FUTURES?|HANDICAP|RUN\s*LINE/i;
-    const SKIP_DESC = /^(LIVE|WAGER|TO\s*WIN|CASH\s*OUT|\$|PARLAY|BET\s*SLIP|MY\s*BETS?|OPEN\s*BETS?)$/i;
+    // Strip noise before scanning for odds — removes "+$1","+$5","CASH OUT", wager boxes
+    const NOISE     = /CASH\s*OUT|\+\$\d+|-\$\d+|\$\s*0+\.?0*|\bWAGER\b|\bTO\s*WIN\b|0\.00/gi;
+    const GAME_INFO = /@|\bvs\.?\b|\bToday\b|\bTomorrow\b|\d{1,2}:\d{2}\s*(AM|PM)/i;
+    const BET_TYPE  = /MONEYLINE|PUCK\s*LINE|SPREAD|TOTAL\s*GOALS?|OVER\/UNDER|\bOVER\b|\bUNDER\b|FIRST\s*HALF|PLAYER\s*PROP|GAME\s*PROP|FUTURES?|HANDICAP|RUN\s*LINE/i;
+    const SKIP_DESC = /^(LIVE|WAGER|TO\s*WIN|CASH\s*OUT|\$|PARLAY|BET\s*SLIP|MY\s*BETS?|OPEN\s*BETS?|\d+\.\d{2})$/i;
+
     const results = [];
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const oddsMatches = Array.from(line.matchAll(/([+-]\d{2,4})/g));
+      // Remove noise (dollar amounts, cash-out labels) before looking for odds
+      const cleanLine = lines[i].replace(NOISE, "").replace(/\s{2,}/g, " ").trim();
+      const oddsMatches = Array.from(cleanLine.matchAll(/([+-]\d{2,4})/g));
       if (!oddsMatches.length) continue;
 
       for (const m of oddsMatches) {
         const n = parseInt(m[1], 10);
         if (Math.abs(n) < 100 || Math.abs(n) > 2500) continue;
 
-        // Description = rest of the line minus the odds and noise
-        let desc = line
+        // Description starts with whatever is left on the odds line after removing the number
+        const descParts = [];
+        const lineRemainder = cleanLine
           .replace(/[+-]\d{2,4}/g, "")
-          .replace(/CASH\s*OUT/gi, "")
-          .replace(/\s{2,}/g, " ")
+          .replace(/\s+/g, " ")
           .trim();
-
-        // Look forward up to 2 lines for a bet-type label
-        let betType = "";
-        for (let j = i + 1; j <= Math.min(i + 2, lines.length - 1); j++) {
-          const next = lines[j];
-          if (next.match(BET_TYPE) && !next.match(/[+-]\d{2,4}/)) {
-            betType = next.replace(/CASH\s*OUT/gi, "").replace(/\s+/g, " ").trim();
-            break;
-          }
+        if (lineRemainder && !SKIP_DESC.test(lineRemainder)) {
+          descParts.push(lineRemainder);
         }
 
-        const fullDesc = [desc, betType].filter(s => s && !SKIP_DESC.test(s)).join(" — ");
-        results.push({ odds: n, desc: fullDesc });
+        // Look ahead up to 2 lines for prop name / bet type
+        // Stop at game info ("Michigan State @ UConn"), another odds, or noise
+        for (let j = i + 1; j <= Math.min(i + 2, lines.length - 1); j++) {
+          const next = lines[j].replace(NOISE, "").replace(/\s+/g, " ").trim();
+          if (!next || SKIP_DESC.test(next)) continue;
+          if (next.match(GAME_INFO))        break; // stop at game/event line
+          if (next.match(/[+-]\d{2,4}/))   break; // stop at next bet's odds
+          descParts.push(next);
+        }
+
+        results.push({ odds: n, desc: descParts.filter(Boolean).join(" — ") });
       }
     }
 
-    // Most negative = favorite cap bet; most positive = underdog bet
+    // Highest positive = underdog bet; most negative = favorite bet
     const favResult = results.filter(r => r.odds < 0).sort((a, b) => a.odds - b.odds)[0];
     const dogResult = results.filter(r => r.odds > 0).sort((a, b) => b.odds - a.odds)[0];
 
     if (!favResult && !dogResult) return null;
     return {
       fav:     favResult ? String(favResult.odds) : "",
-      favDesc: favResult ? favResult.desc : "",
-      dog:     dogResult ? "+" + dogResult.odds : "",
-      dogDesc: dogResult ? dogResult.desc : "",
+      favDesc: favResult ? favResult.desc         : "",
+      dog:     dogResult ? "+" + dogResult.odds   : "",
+      dogDesc: dogResult ? dogResult.desc         : "",
     };
   } catch (e) { console.error("ocr failed", e); return null; }
 }
@@ -378,6 +385,7 @@ function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(!!SB);
   const [myPlayerId, setMyPlayerId] = useState(null);
+  const [linkError, setLinkError] = useState(null);
   // Local fallback when no Supabase (shouldn't happen with keys set, but kept as safety net)
   const [localMe, setLocalMe] = useState(() => { try { return localStorage.getItem("the-tour-me-" + ROOM) || ""; } catch { return ""; } });
   const setLocalMeId = (id) => { setLocalMe(id); try { localStorage.setItem("the-tour-me-" + ROOM, id); } catch {} };
@@ -437,8 +445,12 @@ function App() {
   // load player link when session is established
   useEffect(() => {
     if (!SB || !session) { setMyPlayerId(null); return; }
+    setLinkError(null);
     SB.from("player_links").select("player_id").eq("room", ROOM).eq("user_id", session.user.id).maybeSingle()
-      .then(({ data }) => { if (data) setMyPlayerId(data.player_id); });
+      .then(({ data, error }) => {
+        if (error) { setLinkError(error.message); return; }
+        if (data) setMyPlayerId(data.player_id);
+      });
   }, [session]);
 
   const round = state.rounds.find((r) => r.id === state.activeRoundId) || state.rounds[0];
@@ -495,13 +507,42 @@ function App() {
   const loadDemo = () => { setState(demoState()); setActiveHoleId(null); };
   const resetAll = () => { if (!confirm("Clear everything for everyone on this card? This can't be undone.")) return; setState(emptyState()); setActiveHoleId(null); };
 
-  // Auth gates
   if (SB && authLoading) return (
     <div style={{ minHeight:"100vh", background:"var(--pine)", display:"grid", placeItems:"center", color:"var(--card)", fontFamily:"system-ui" }}>
       Loading…
     </div>
   );
   if (SB && !session) return <LoginForm />;
+
+  // Surface table-missing or RLS errors clearly rather than silently getting stuck
+  if (SB && session && linkError) return (
+    <div className="auth-screen">
+      <div className="auth-eyebrow">Scorecard · betting links</div>
+      <div className="auth-logo">The Tour</div>
+      <div className="auth-card">
+        <h2>Setup needed</h2>
+        <p>The player links table is missing or has a permissions issue. Run this SQL in your <b>Supabase SQL Editor</b> then refresh:</p>
+        <pre style={{background:"#f3ead3",border:"1px solid var(--edge)",borderRadius:8,padding:"10px 12px",fontSize:11,overflowX:"auto",lineHeight:1.6,margin:0}}>{`create table if not exists player_links (
+  room text not null,
+  player_id text not null,
+  user_id uuid references auth.users not null,
+  primary key (room, player_id)
+);
+alter table player_links enable row level security;
+create policy "read links" on player_links
+  for select using (true);
+create policy "insert own link" on player_links
+  for insert to authenticated
+  with check (auth.uid() = user_id);
+alter table player_links add constraint
+  one_player_per_user unique (room, user_id);`}</pre>
+        <p style={{fontSize:12,color:"var(--ink2)"}}>Error: {linkError}</p>
+        <button className="solid" onClick={() => { setLinkError(null); window.location.reload(); }}>Refresh after running SQL</button>
+        <button className="ghost auth-switch" onClick={() => SB.auth.signOut()}>Sign out</button>
+      </div>
+    </div>
+  );
+
   if (SB && session && !myPlayerId && state.players.length > 0) return (
     <PlayerLinker players={state.players} session={session} onLink={setMyPlayerId} />
   );
@@ -782,7 +823,14 @@ function PlayerLinker({ players, session, onLink }) {
     setLoading(true);
     const { error } = await SB.from("player_links").insert({ room: ROOM, player_id: pid, user_id: session.user.id });
     setLoading(false);
-    if (error) { alert("Couldn't link player: " + error.message); return; }
+    if (error) {
+      if (error.message.includes("already exists") || error.message.includes("unique")) {
+        alert("You've already claimed a player in this room. Refresh the page.");
+      } else {
+        alert("Couldn't link player — " + error.message + "\n\nMake sure you've run the player_links SQL in Supabase.");
+      }
+      return;
+    }
     onLink(pid);
   };
 
