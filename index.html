@@ -305,18 +305,29 @@ async function readSlip(file) {
   try {
     const res = await window.Tesseract.recognize(file, "eng");
     const raw = (res && res.data && res.data.text) || "";
-    const lines = raw.split("\n").map(l => l.replace(/[−–—]/g, "-").trim()).filter(Boolean);
+    const lines = raw.split("\n").map(l => l.replace(/[^\x00-\x7F]/g, " ").replace(/[−–—]/g, "-").trim()).filter(Boolean);
 
-    // Strip noise before scanning for odds — removes "+$1","+$5","CASH OUT", wager boxes
-    const NOISE     = /CASH\s*OUT|\+\$\d+|-\$\d+|\$\s*0+\.?0*|\bWAGER\b|\bTO\s*WIN\b|0\.00/gi;
-    const GAME_INFO = /@|\bvs\.?\b|\bToday\b|\bTomorrow\b|\d{1,2}:\d{2}\s*(AM|PM)/i;
-    const BET_TYPE  = /MONEYLINE|PUCK\s*LINE|SPREAD|TOTAL\s*GOALS?|OVER\/UNDER|\bOVER\b|\bUNDER\b|FIRST\s*HALF|PLAYER\s*PROP|GAME\s*PROP|FUTURES?|HANDICAP|RUN\s*LINE/i;
-    const SKIP_DESC = /^(LIVE|WAGER|TO\s*WIN|CASH\s*OUT|\$|PARLAY|BET\s*SLIP|MY\s*BETS?|OPEN\s*BETS?|\d+\.\d{2})$/i;
+    const NOISE      = /CASH\s*OUT|\+\$\d+|-\$\d+|\$\s*0+\.?0*|\bWAGER\b|\bTO\s*WIN\b|0\.00/gi;
+    const SKIP_DESC  = /^(LIVE|WAGER|TO\s*WIN|CASH\s*OUT|\$|PARLAY|BET\s*SLIP|MY\s*BETS?|OPEN\s*BETS?|\d+\.\d{2})$/i;
+    // Strip OCR misreadings of UI icons: circle-minus read as "©)" or "(-)", arrow as "="
+    const ICON_JUNK  = /^[\s©®\(\)\-=\+\.]+/;
+
+    // Extract description text from a line, stopping before any game reference ("@","vs")
+    const descPortion = (raw) => {
+      let s = raw.replace(NOISE, "").replace(/\s{2,}/g, " ").trim();
+      const gameIdx = s.search(/@|\bvs\.?\b/i);
+      if (gameIdx === 0) return "";          // line is pure game info
+      if (gameIdx > 0) s = s.slice(0, gameIdx).trim();
+      s = s.replace(ICON_JUNK, "").trim();
+      return s;
+    };
+
+    const isGameLine = (l) => /@|\bvs\.?\b|\bToday\b|\bTomorrow\b|\d{1,2}:\d{2}\s*(AM|PM)/i.test(l);
+    const hasOdds    = (l) => /[+-]\d{2,4}/.test(l.replace(NOISE, ""));
 
     const results = [];
 
     for (let i = 0; i < lines.length; i++) {
-      // Remove noise (dollar amounts, cash-out labels) before looking for odds
       const cleanLine = lines[i].replace(NOISE, "").replace(/\s{2,}/g, " ").trim();
       const oddsMatches = Array.from(cleanLine.matchAll(/([+-]\d{2,4})/g));
       if (!oddsMatches.length) continue;
@@ -325,31 +336,35 @@ async function readSlip(file) {
         const n = parseInt(m[1], 10);
         if (Math.abs(n) < 100 || Math.abs(n) > 2500) continue;
 
-        // Description starts with whatever is left on the odds line after removing the number
         const descParts = [];
-        const lineRemainder = cleanLine
-          .replace(/[+-]\d{2,4}/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
+        const lineRemainder = descPortion(cleanLine.replace(/[+-]\d{2,4}/g, ""));
+
         if (lineRemainder && !SKIP_DESC.test(lineRemainder)) {
+          // Case 1: description text is on the same line as the odds
           descParts.push(lineRemainder);
+          // Look ahead for additional lines (e.g. prop player name)
+          for (let j = i + 1; j <= Math.min(i + 3, lines.length - 1); j++) {
+            if (hasOdds(lines[j])) break;
+            const frag = descPortion(lines[j]);
+            if (!frag || SKIP_DESC.test(frag)) continue;
+            descParts.push(frag);
+            if (isGameLine(lines[j])) break; // grabbed pre-game part, stop
+          }
+        } else {
+          // Case 2: odds are alone on their own line — description is above, look backwards
+          for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+            if (hasOdds(lines[j])) break;
+            const frag = descPortion(lines[j]);
+            if (frag && !SKIP_DESC.test(frag)) descParts.unshift(frag);
+            if (isGameLine(lines[j])) break;
+          }
         }
 
-        // Look ahead up to 2 lines for prop name / bet type
-        // Stop at game info ("Michigan State @ UConn"), another odds, or noise
-        for (let j = i + 1; j <= Math.min(i + 2, lines.length - 1); j++) {
-          const next = lines[j].replace(NOISE, "").replace(/\s+/g, " ").trim();
-          if (!next || SKIP_DESC.test(next)) continue;
-          if (next.match(GAME_INFO))        break; // stop at game/event line
-          if (next.match(/[+-]\d{2,4}/))   break; // stop at next bet's odds
-          descParts.push(next);
-        }
-
-        results.push({ odds: n, desc: descParts.filter(Boolean).join(" — ") });
+        const fullDesc = descParts.filter(Boolean).join(" — ");
+        results.push({ odds: n, desc: fullDesc });
       }
     }
 
-    // Highest positive = underdog bet; most negative = favorite bet
     const favResult = results.filter(r => r.odds < 0).sort((a, b) => a.odds - b.odds)[0];
     const dogResult = results.filter(r => r.odds > 0).sort((a, b) => b.odds - a.odds)[0];
 
@@ -362,6 +377,7 @@ async function readSlip(file) {
     };
   } catch (e) { console.error("ocr failed", e); return null; }
 }
+
 function computeStrokes(par, entry) {
   if (!entry || !entry.outcome) return null;
   if (entry.outcome === "dog") return par - Math.floor(Math.abs(num(entry.dog)) / 100);
